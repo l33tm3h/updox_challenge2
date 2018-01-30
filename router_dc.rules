@@ -1,0 +1,106 @@
+*filter
+:ufw-user-input - [0:0]
+:ufw-user-output - [0:0]
+:ufw-user-forward - [0:0]
+:ufw-before-logging-input - [0:0]
+:ufw-before-logging-output - [0:0]
+:ufw-before-logging-forward - [0:0]
+:ufw-user-logging-input - [0:0]
+:ufw-user-logging-output - [0:0]
+:ufw-user-logging-forward - [0:0]
+:ufw-after-logging-input - [0:0]
+:ufw-after-logging-output - [0:0]
+:ufw-after-logging-forward - [0:0]
+:ufw-logging-deny - [0:0]
+:ufw-logging-allow - [0:0]
+:ufw-user-limit - [0:0]
+:ufw-user-limit-accept - [0:0]
+### RULES ###
+
+#
+# http
+#
+### tuple ### allow any 80 {{ dc_load_balancer_cluster }}, any 0.0.0.0/0 in
+-A ufw-user-input -p tcp -d {{ dc_load_balancer_cluster }} --dport 80 -s {{ router_hq }} -j ACCEPT
+-A ufw-user-input -p udp -d {{ dc_load_balancer_cluster }} --dport 80 -s {{ router_hq }} -j ACCEPT
+
+### tuple ### allow any 443 {{ dc_load_balancer_cluster }} any 0.0.0.0/0 in
+-A ufw-user-input -p tcp -d {{ dc_load_balancer_cluster }} --dport 443 -s {{ router_hq }} -j ACCEPT
+-A ufw-user-input -p udp -d {{ dc_load_balancer_cluster }} --dport 443 -s {{ router_hq }} -j ACCEPT
+
+#
+# ssh
+#
+### tuple ### allow tcp 22 0.0.0.0/0 any 0.0.0.0/0 in
+-A ufw-user-input -p tcp --dports 22 -s {{ router_hq }} -j ACCEPT
+-A ufw-user-input -p udp --dports 22 -s {{ router_hq }} -j ACCEPT
+
+#
+# tunnel
+#
+### tuple ### allow any 50 0.0.0.0/0 any 0.0.0.0/0 in
+-A ufw-user-input -p tcp --dport 50 -j ACCEPT
+-A ufw-user-input -p udp --dport 50 -j ACCEPT
+
+### tuple ### allow any 51 0.0.0.0/0 any 0.0.0.0/0 in
+-A ufw-user-input -p tcp --dport 51 -j ACCEPT
+-A ufw-user-input -p udp --dport 51 -j ACCEPT
+
+### tuple ### allow any 500 0.0.0.0/0 any 0.0.0.0/0 in
+-A ufw-user-input -p tcp --dport 500 -j ACCEPT
+-A ufw-user-input -p udp --dport 500 -j ACCEPT
+
+### tuple ### allow udp 4500 0.0.0.0/0 any 0.0.0.0/0 in
+-A ufw-user-input -p udp --dport 4500 -j ACCEPT
+
+#
+# smb fileserver
+#
+-A ufw-user-input -p tcp -d {{ dc_smb_server }} --dports 445 -s {{ router_hq }} -j ACCEPT
+-A ufw-user-input -p udp -d {{ dc_smb_server }} --dports 445 -s {{ router_hq }} -j ACCEPT
+
+#
+# mariadb
+#
+### tuple ### allow tcp 3306 {{ subnet_dc_db }} any {{ router_hq or router_aws }} in
+-A ufw-user-input -p tcp -d {{ subnet_dc_db }} --dport 3306 -s {{ router_hq }} -j ACCEPT
+-A ufw-user-input -p tcp -d {{ subnet_dc_db }} --dport 3306 -s {{ router_aws }} -j ACCEPT
+
+#
+# kibana
+#
+### tuple ### allow any 5061 {{ dc_load_balancer_cluster }} any 0.0.0.0/0 in
+-A ufw-user-input -p tcp -d {{ dc_load_balancer_cluster }} --dport 5061 -s {{ router_hq }} -j ACCEPT
+-A ufw-user-input -p udp -d {{ dc_load_balancer_cluster }} --dport 5061 -s {{ router_hq }} -j ACCEPT
+
+#
+# health check
+#
+### tuple ### allow tcp 6556 {{ dc_health_check }} any 0.0.0.0/0 in
+-A ufw-user-input -p tcp -d {{ dc_health_check }} --dport 6556 -s {{ router_hq }} -j ACCEPT
+-A ufw-user-input -p tcp -d {{ dc_health_check }} --dport 6556 -s {{ router_aws }} -j ACCEPT
+
+#
+# es
+#
+### tuple ### allow tcp 9200 {{ dc_load_balancer_cluster }} any 0.0.0.0/0 in
+-A ufw-user-input -p tcp -d {{ dc_load_balancer_cluster }} --dport 9200 -s {{ router_hq }} -j ACCEPT
+-A ufw-user-input -p udp -d {{ dc_load_balancer_cluster }} --dport 9200 -s {{ router_hq }} -j ACCEPT
+
+
+### END RULES ###
+
+### LOGGING ###
+-A ufw-after-logging-input -j LOG --log-prefix "[UFW BLOCK] " -m limit --limit 3/min --limit-burst 10
+-A ufw-after-logging-forward -j LOG --log-prefix "[UFW BLOCK] " -m limit --limit 3/min --limit-burst 10
+-I ufw-logging-deny -m conntrack --ctstate INVALID -j RETURN -m limit --limit 3/min --limit-burst 10
+-A ufw-logging-deny -j LOG --log-prefix "[UFW BLOCK] " -m limit --limit 3/min --limit-burst 10
+-A ufw-logging-allow -j LOG --log-prefix "[UFW ALLOW] " -m limit --limit 3/min --limit-burst 10
+### END LOGGING ###
+
+### RATE LIMITING ###
+-A ufw-user-limit -m limit --limit 3/minute -j LOG --log-prefix "[UFW LIMIT BLOCK] "
+-A ufw-user-limit -j REJECT
+-A ufw-user-limit-accept -j ACCEPT
+### END RATE LIMITING ###
+COMMIT
